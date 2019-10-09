@@ -27,8 +27,12 @@ import winreg
 
 # Constants
 # Axis mapping
-axis = {'X': 0x30, 'Y': 0x31, 'Z': 0x32, 'RX': 0x33, 'RY': 0x34, 'RZ': 0x35,
-		'SL0': 0x36, 'SL1': 0x37, 'WHL': 0x38, 'POV': 0x39}
+axis = {'X': 0x30, 'Y': 0x31, 
+		'Z': 0x32, 'R': 0x35,
+		'U': 0x33, 'V': 0x37}
+		# 'RX': 0x33, 'RY': 0x34, 'RZ': 0x35,
+		# 'SL0': 0x36, 'SL1': 0x37, 'WHL': 0x38, 
+		# 'POV': 0x39}
 		
 # Globals
 options = None
@@ -107,10 +111,13 @@ def joystick_run():
 	try:
 		# Load the vJoy library
 		# Load the registry to find out the install location
-		vjoyregkey = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{8E31F76F-74C3-47F1-9550-E041EEDC5FBB}_is1')
-		installpath = winreg.QueryValueEx(vjoyregkey, 'InstallLocation')
-		winreg.CloseKey(vjoyregkey)
-		#print(installpath[0])
+		# vjoyregkey = vjoy_reg_key()
+		# installpath = winreg.QueryValueEx(vjoyregkey, 'InstallLocation')
+		# winreg.CloseKey(vjoyregkey)
+		installpath = ["C:\\Program Files\\vJoy\\"]
+		if options.verbose:
+			print("VJoy install path", installpath[0])
+
 		dll_file = os.path.join(installpath[0], 'x64', 'vJoyInterface.dll')
 		vjoy = ctypes.WinDLL(dll_file)
 		#print(vjoy.GetvJoyVersion())
@@ -123,7 +130,7 @@ def joystick_run():
 			assert(vjoy.GetVJDStatus(vid) == 0)
 			vjoy.ResetVJD(vid)
 	except:
-		#traceback.print_exc()
+		# traceback.print_exc()
 		print('Error initializing virtual joysticks')
 		return
 	
@@ -133,17 +140,24 @@ def joystick_run():
 		while True:
 			while midi.poll():
 				ipt = midi.read(1)
-				#print(ipt)
+				# print(ipt)
 				key = tuple(ipt[0][0][0:2])
 				reading = ipt[0][0][2]
+				# hacky fix for worlde special rotary button
+				if key[0] == 192:
+					reading = key[1]
+					key = (key[0], 0)
 				# Check that the input is defined in table
-				#print(key, reading)
+				# print(key, reading)
 				if not key in table:
 					continue
 				opt = table[key]
 				if options.verbose:
 					print(key, '->', opt, reading)
-				if key[0] == 176:
+				if key[0] == 144:
+					# A button input
+					vjoy.SetBtn(reading, opt[0], opt[1])
+				else:
 					# A slider input
 					# Check that the output axis is valid
 					# Note: We did not check if that axis is defined in vJoy
@@ -151,9 +165,7 @@ def joystick_run():
 						continue
 					reading = (reading + 1) << 8
 					vjoy.SetAxis(reading, opt[0], axis[opt[1]])
-				elif key[0] == 144:
-					# A button input
-					vjoy.SetBtn(reading, opt[0], opt[1])
+
 			time.sleep(0.1)
 	except:
 		#traceback.print_exc()
